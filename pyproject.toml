@@ -1,0 +1,36 @@
+[project]
+name = "brewfile"
+version = "0.1.0"
+description = "Intelligent Homebrew package management using brew bundle with JSON configuration and machine-aware installations"
+authors = [{name = "Walter Mwaniki", email = "walter.g.mwaniki@gmail.com"}]
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Installation/Setup",
+    "Topic :: System :: Software Distribution",
+]
+keywords = ["homebrew", "brew", "package-management", "macos", "cli"]
+dependencies = []
+
+[project.scripts]
+brewfile = "brewfile:main"
+
+[project.urls]
+Homepage = "https://github.com/waltermwaniki/brewfile"
+Repository = "https://github.com/waltermwaniki/brewfile"
+Issues = "https://github.com/waltermwaniki/brewfile/issues"
+
+[build-system]
+requires = ["uv_build>=0.8.15,<0.9.0"]
+build-backend = "uv_build"
