@@ -4,8 +4,8 @@ class Brewfile < Formula
   desc "Intelligent Homebrew package management using brew bundle with JSON configuration"
   homepage "https://github.com/waltermwaniki/homebrew-brewfile"
   # Using URL just for Homebrew metadata - actual install from PyPI
-  url "https://files.pythonhosted.org/packages/source/b/brewfile/brewfile-0.1.3.tar.gz"
-  sha256 "d3ae55018f80c1f5ce305ca6ba8e3449ac9c7cff0464d88035087a6cb61fa797"
+  url "https://files.pythonhosted.org/packages/source/b/brewfile/brewfile-0.1.1.tar.gz"
+  sha256 "f728917a2a874edbd0485c16a4c74aea20ed516dade46d699ad6b5881bac21c8"
   license "MIT"
   head "https://github.com/waltermwaniki/homebrew-brewfile.git", branch: "main"
 
