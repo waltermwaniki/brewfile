@@ -106,6 +106,8 @@ jobs:
   create-github-release:
     needs: update-homebrew-formula
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to create GitHub releases
     
     steps:
     - uses: actions/checkout@v4
@@ -117,12 +119,10 @@ jobs:
         echo "version=$VERSION" >> $GITHUB_OUTPUT
     
     - name: Create GitHub Release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ github.ref_name }}
-        release_name: Release ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
         body: |
           ## Installation
           
