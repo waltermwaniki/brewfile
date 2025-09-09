@@ -38,6 +38,8 @@ jobs:
   update-homebrew-formula:
     needs: publish-to-pypi
     runs-on: ubuntu-latest
+    permissions:
+      contents: write  # Required to push formula updates
     
     steps:
     - uses: actions/checkout@v4
