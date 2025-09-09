@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 from .brew import Brew, PackageCache, compare_packages
-from .models import BrewfileConfig, PackageGroup, PackageInfo, PackageType, InstallationStatus
+from .models import BrewfileConfig, InstallationStatus, PackageGroup, PackageInfo, PackageType
 from .utils import AnsiColor, die, say, success, warn
 
 
@@ -111,26 +111,38 @@ class BrewfileManager:
     # Command methods
     def cmd_init(self) -> None:
         """Initialize machine configuration interactively."""
-        self.config = BrewfileConfig.load(self.config_file)
-
         say(f"Configuring machine: {AnsiColor.BLUE}{self.hostname}{AnsiColor.RESET}")
 
+        # Step 1: Ensure config file exists (create empty one if needed)
+        if not self.config_file.exists():
+            say("Creating new brewfile configuration...")
+            self.config = BrewfileConfig()  # Empty config
+            self.config.save(self.config_file)
+            success(f"Created configuration at {self.config_file}")
+        else:
+            self.config = BrewfileConfig.load(self.config_file)
+
+        # Step 2: Check if package groups exist, create "core" if none
         if not self.config.packages:
-            # No package groups exist, create a default one
-            say("No package groups found. Creating default group from current system...")
-            default_group_name = "default"
+            say("No package groups found. Creating empty 'core' group...")
 
-            # Get current system packages
-            installed_packages = self.package_cache.get_installed_packages()
+            # Create empty "core" group
+            core_group = PackageGroup()
+            self.config.packages["core"] = core_group
 
-            # Add all to default group
-            default_group = PackageGroup()
-            for pkg in installed_packages:
-                default_group.add_package(pkg.package_type, pkg.name)
+            # Assign "core" group to this machine
+            self.config.machines[self.hostname] = ["core"]
+            self.config.save(self.config_file)
 
-            self.config.packages[default_group_name] = default_group
-            success(f"Created '{default_group_name}' group with {len(installed_packages)} packages")
+            success(f"Created empty 'core' group for {self.hostname}")
+            print()
+            say("Next steps:")
+            print("  • Add packages: brewfile add <package_name>")
+            print("  • Adopt current system: brewfile sync-adopt")
+            print("  • Check status: brewfile status")
+            return
 
+        # Step 3: Groups exist - proceed with selection process
         # Show available groups
         print("\nAvailable package groups:")
         for i, group_name in enumerate(self.config.packages.keys(), 1):
@@ -166,28 +178,28 @@ class BrewfileManager:
         """Show package status by comparing config and system state."""
         try:
             configured, missing, extra = self.machine_packages
-            
+
             # Get machine groups for display
             groups = self.config.machines.get(self.hostname, [])
-            
+
             print(f"\n{AnsiColor.BLUE}📦 Package Status for {self.hostname}:{AnsiColor.RESET}")
             print(f"Groups: {', '.join(groups)}")
-            
+
             # Group packages by type for display
             packages_by_type = {
                 pkg_type.plural: [p for p in configured if p.package_type == pkg_type] for pkg_type in PackageType
             }
-            
+
             # Group extra packages by type for display
             extra_by_type = {
                 pkg_type.plural: [p for p in extra if p.package_type == pkg_type] for pkg_type in PackageType
             }
-            
+
             # Show each package type
             for pkg_type in PackageType:
                 package_type_name = pkg_type.plural
                 packages = packages_by_type[package_type_name]
-                
+
                 # Show configured packages
                 if packages:
                     print(f"\n{package_type_name.title()}:")
@@ -198,7 +210,7 @@ class BrewfileManager:
                             print(
                                 f"  {AnsiColor.RED}✗{AnsiColor.RESET} {pkg.name} {AnsiColor.GRAY}({pkg.group}) - missing{AnsiColor.RESET}"
                             )
-                
+
                 # Show extra packages
                 extra_packages = extra_by_type.get(package_type_name, [])
                 if extra_packages:
@@ -210,22 +222,22 @@ class BrewfileManager:
                         print(
                             f"  {AnsiColor.BLUE}+{AnsiColor.RESET} {package.name} {AnsiColor.GRAY}- not in config{AnsiColor.RESET}"
                         )
-            
+
             # Summary counts
             total_missing = len(missing)
             total_extra = len(extra)
-            
+
             print("\nSummary:")
             if total_missing > 0:
                 print(f"  {AnsiColor.RED}✗{AnsiColor.RESET} {total_missing} package(s) need installation")
             if total_extra > 0:
                 print(f"  {AnsiColor.BLUE}+{AnsiColor.RESET} {total_extra} extra package(s) not in current config")
-            
+
             if total_missing == 0 and total_extra == 0:
                 success("All packages synchronized! 🎉")
-            
+
             return total_missing, total_extra
-                
+
         except Exception as e:
             die(f"Failed to get package status: {e}")
             return 0, 0  # This won't be reached due to die(), but satisfies type checker
@@ -265,11 +277,11 @@ class BrewfileManager:
     def cmd_sync_adopt(self) -> None:
         """Install missing packages and adopt extra packages to config."""
         configured, missing, extra = self.machine_packages
-        
+
         if not missing and not extra:
             success("All packages are already synchronized!")
             return
-        
+
         # Show detailed summary
         print(f"\n{AnsiColor.YELLOW}Sync + Adopt Summary:{AnsiColor.RESET}")
         if missing:
@@ -280,7 +292,7 @@ class BrewfileManager:
             for pkg_type_name, packages in missing_by_type.items():
                 if packages:
                     print(f"  {pkg_type_name.title()}: {', '.join(p.name for p in packages)}")
-        
+
         if extra:
             print(f"\n{AnsiColor.BLUE}ADOPT ({len(extra)}):{AnsiColor.RESET}")
             extra_by_type = {
@@ -289,16 +301,16 @@ class BrewfileManager:
             for pkg_type_name, packages in extra_by_type.items():
                 if packages:
                     print(f"  {pkg_type_name.title()}: {', '.join(p.name for p in packages)}")
-        
+
         print(f"\nThis will install missing packages and keep all extras in your {self.hostname} config.")
         print("No packages will be removed from your system.")
-        
+
         try:
             confirm = input("\nProceed? (y/N): ").lower().strip()
         except (EOFError, KeyboardInterrupt):
             print()
             return
-        
+
         if not confirm.startswith("y"):
             return
 
@@ -332,45 +344,43 @@ class BrewfileManager:
     def cmd_sync_cleanup(self) -> None:
         """Install missing packages and remove extra packages."""
         configured, missing, extra = self.machine_packages
-        
+
         if not missing and not extra:
             success("All packages are already synchronized!")
             return
-        
+
         # Show detailed warning summary
         print(f"\n{AnsiColor.YELLOW}Sync + Cleanup Summary:{AnsiColor.RESET}")
         if missing:
             print(f"\n{AnsiColor.GREEN}INSTALL ({len(missing)}):{AnsiColor.RESET}")
             # Group by type for display
             missing_by_type = {
-                pkg_type.plural: [p.name for p in missing if p.package_type == pkg_type]
-                for pkg_type in PackageType
+                pkg_type.plural: [p.name for p in missing if p.package_type == pkg_type] for pkg_type in PackageType
             }
             for pkg_type_name, packages in missing_by_type.items():
                 if packages:
                     print(f"  {pkg_type_name.title()}: {', '.join(packages)}")
-        
+
         if extra:
             print(f"\n{AnsiColor.RED}⚠ REMOVE ({len(extra)}):{AnsiColor.RESET}")
             # Group by type for display
             extra_by_type = {
-                pkg_type.plural: [p.name for p in extra if p.package_type == pkg_type]
-                for pkg_type in PackageType
+                pkg_type.plural: [p.name for p in extra if p.package_type == pkg_type] for pkg_type in PackageType
             }
             for pkg_type_name, packages in extra_by_type.items():
                 if packages:
                     print(f"  {pkg_type_name.title()}: {', '.join(packages)}")
-        
+
         print("\nThis will install missing packages and remove extras from your system.")
         if extra:
             print(f"{AnsiColor.RED}WARNING: This will uninstall packages from your system!{AnsiColor.RESET}")
-        
+
         try:
             confirm = input("\nProceed? (y/N): ").lower().strip()
         except (EOFError, KeyboardInterrupt):
             print()
             return
-        
+
         if not confirm.startswith("y"):
             return
 

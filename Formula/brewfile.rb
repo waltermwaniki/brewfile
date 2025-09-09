@@ -1,0 +1,21 @@
+class Brewfile < Formula
+  include Language::Python::Virtualenv
+
+  desc "Intelligent Homebrew package management using brew bundle with JSON configuration"
+  homepage "https://github.com/waltermwaniki/homebrew-brewfile"
+  # Using URL just for Homebrew metadata - actual install from PyPI
+  url "https://files.pythonhosted.org/packages/source/b/brewfile/brewfile-0.1.3.tar.gz"
+  sha256 "d3ae55018f80c1f5ce305ca6ba8e3449ac9c7cff0464d88035087a6cb61fa797"
+  license "MIT"
+  head "https://github.com/waltermwaniki/homebrew-brewfile.git", branch: "main"
+
+  depends_on "python3"
+
+  def install
+    virtualenv_install_with_resources
+  end
+
+  test do
+    system bin/"brewfile", "--help"
+  end
+end

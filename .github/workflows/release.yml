@@ -1,0 +1,141 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  publish-to-pypi:
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v4
+      with:
+        version: "latest"
+    
+    - name: Set up Python
+      run: uv python install 3.12
+    
+    - name: Build package
+      run: |
+        echo "Building with setuptools backend..."
+        uv build
+        echo "Built files:"
+        ls -la dist/
+    
+    - name: Publish to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        print-hash: true
+
+  update-homebrew-formula:
+    needs: publish-to-pypi
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Switch to main branch
+      run: |
+        git checkout main
+        git pull origin main
+    
+    - name: Extract version from tag
+      id: version
+      run: |
+        VERSION=${GITHUB_REF_NAME#v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+    
+    - name: Wait for PyPI to be available
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        echo "Waiting for brewfile==$VERSION to be available on PyPI..."
+        for i in {1..30}; do
+          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/brewfile/$VERSION/json")
+          if [ "$HTTP_STATUS" = "200" ]; then
+            echo "Package is available on PyPI!"
+            break
+          fi
+          echo "Attempt $i/30: Package not yet available (HTTP $HTTP_STATUS), waiting 30 seconds..."
+          sleep 30
+        done
+    
+    - name: Download PyPI package and calculate SHA256
+      id: sha256
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        PYPI_URL="https://files.pythonhosted.org/packages/source/b/brewfile/brewfile-${VERSION}.tar.gz"
+        echo "Downloading from: $PYPI_URL"
+        curl -L -o brewfile-${VERSION}.tar.gz "$PYPI_URL"
+        SHA256=$(sha256sum brewfile-${VERSION}.tar.gz | cut -d' ' -f1)
+        echo "sha256=$SHA256" >> $GITHUB_OUTPUT
+        echo "SHA256: $SHA256"
+    
+    - name: Update Homebrew formula
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        SHA256=${{ steps.sha256.outputs.sha256 }}
+        
+        # Update URL and SHA256 in formula
+        sed -i "s|url \".*\"|url \"https://files.pythonhosted.org/packages/source/b/brewfile/brewfile-${VERSION}.tar.gz\"|g" Formula/brewfile.rb
+        sed -i "s/sha256 \".*\"/sha256 \"$SHA256\"/g" Formula/brewfile.rb
+        
+        echo "Updated formula:"
+        cat Formula/brewfile.rb
+    
+    - name: Commit updated formula
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add Formula/brewfile.rb
+        git commit -m "Update formula for v${{ steps.version.outputs.version }} (PyPI release)"
+        git push origin main
+
+  create-github-release:
+    needs: update-homebrew-formula
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Extract version from tag
+      id: version
+      run: |
+        VERSION=${GITHUB_REF_NAME#v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+    
+    - name: Create GitHub Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.ref_name }}
+        release_name: Release ${{ github.ref_name }}
+        body: |
+          ## Installation
+          
+          ### Via Homebrew (recommended)
+          ```bash
+          brew tap waltermwaniki/brewfile
+          brew install brewfile
+          ```
+          
+          ### Via pip
+          ```bash
+          pip install brewfile==${{ steps.version.outputs.version }}
+          ```
+          
+          ## What's Changed
+          See [CHANGELOG.md](https://github.com/waltermwaniki/homebrew-brewfile/blob/main/CHANGELOG.md) for details.
+        draft: false
+        prerelease: false
